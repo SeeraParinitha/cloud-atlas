@@ -1,73 +1,142 @@
-# Cloud Atlas: cloud and shadow restoration
+# Cloud Atlas
+### Cloud Density-Aware Cloud Removal for Optical Remote Sensing Images
 
-The original HSFormer-with-prior reference website now has a **full-photo fallback**:
-when the model fails visual checks, it can show one complete clear reference
-observation of the same area in an original/result slider. Use
-`notebooks/reference_web_full_fallback.ipynb` and the same original weight datasets.
-See [the reference website guide](docs/REFERENCE_WEB_FULL_FALLBACK.md).
+Cloud Atlas is a final-year research project exploring cloud and cloud shadow removal from optical satellite imagery. It combines model comparison, adaptation to Sentinel-2 imagery, and learning from earlier observations with a local web application.
 
-## Use the already-trained model
+The application provides Google sign-in, location search, satellite acquisition selection, image comparison, downloads, and account-based result history.
 
-Training is complete for the supplied output archive. Use `notebooks/cloud_shadow_inference.ipynb` to launch the map website without training. See `docs/INFERENCE.md` for exact Kaggle steps. City/town search, a draggable centre marker, and two-corner rectangle selection are included. Start on CPU to save GPU quota.
+## Project Workflow
 
-## Run on Kaggle
+1. Prepare paired cloudy and clear RGB images from RICE.
+2. Train and compare a cloud-guided attention U-Net and an RGB-adapted HSFormer.
+3. Fine-tune both models on a prepared WHUS2-CRv subset.
+4. Train a fusion component using frozen HSFormer predictions and earlier observations of the same area.
+5. Evaluate the models and provide an interface for satellite image processing.
 
-Upload `notebooks/cloud_shadow_complete.ipynb`. Select a T4 GPU and enable Internet. Add Copernicus Sentinel Hub OAuth credentials as Kaggle Secrets named `CDSE_CLIENT_ID` and `CDSE_CLIENT_SECRET`, granting this notebook access. These are required only for satellite retrieval. An optional `APP_PASSWORD` sets the demo login password. Then Run All.
+## Models
 
-The notebook contains the project source: no manual source upload or dataset-path edits are needed for RICE. It downloads the official RICE ZIP, checks it, prepares paired images, trains both models, compares validation results, exports a winner, evaluates the separate test split, generates reports and creates `cloud_shadow_complete.zip`. The final cell starts a password-protected temporary web demo if credentials are present and both models finished.
+### Cloud-Guided Attention U-Net
 
-The faster default is 30 epochs per model (reduced from 100). This cuts the epoch count by 70%, but can reduce final accuracy and does not guarantee completion within 20 GPU hours. Each epoch logs an estimated remaining time for that model. Even 30 epochs per model can exceed one Kaggle session. The code stops around its 10.5-hour budget, saves checkpoints and reports incomplete training. Download the output ZIP and attach it as a Kaggle input to the next session; Run All resumes. It does not lower the training schedule or select from incomplete runs. GPU quota, downloads and provider availability cannot be guaranteed by code. Kaggle's two T4 option uses one GPU here; this is not distributed training.
+A four-scale encoder–decoder model with skip connections. It predicts a cloud mask, a corruption-severity map, and an RGB correction.
 
-## Models and original-code preservation
+The mask and severity guide feature processing. The predicted mask controls how much correction is applied to the input image.
 
-- Model 1 (`full`): the original residual CNN encoder, mask/severity guidance, attention decoder and gated restoration. Its model weights/layout, outputs and loss are preserved; regression tests compare it with the original extracted source. `notebooks/original_reference.ipynb` is the unmodified archive of your provided notebook. The new notebook reorganizes execution and adds orchestration; it does not reproduce every old display cell.
-- Model 2 (`hsformer`): official HSFormer RGB architecture pinned to commit `8d59013b7f9ecaf3e048b1d9dc7eac85805b0b38`, adapted to the same final-output restoration loss. This is **not** an exact reproduction of the paper's multiscale/uncertainty training. Its predicted variance is not presented as confidence. It uses 256Ã—256 patches and batch 1 with four-step gradient accumulation to reduce GPU memory.
-- One seed (123), no cross-validation. Fixed 70/15/15 train/validation/test split, seed 42 for partitioning. Image-level split: geographic independence is not established. Pseudo-supervision calibration uses training data only.
+### RGB-Adapted HSFormer
 
-Each model's checkpoint uses its highest validation PSNR. Across models, the winner has the lowest mean rank over validation PSNR, SSIM, LPIPS and stable-clear change MAE. Ties use PSNR then latency. Test images never select the winner. Reports include RMSE, clear/affected-region metrics, per-image results, runtime, training curves and example panels. A relative winner can still perform poorly in absolute terms: inspect held-out results before making scientific claims.
+An adaptation of the published HSFormer architecture for three-channel RGB imagery. It combines convolutional feature extraction, transformer attention, multi-scale reconstruction, and refinement.
 
-The external HSFormer repository has no license file in the pinned source checked here. Review upstream rights before redistribution or commercial deployment. Source is fetched at runtime; it is not included in the source-delivery ZIP.
+The original architecture is credited to its authors. This project's RGB training setup is not a reproduction of every experiment in the original paper.
 
-## WHUS2-CR
+### Learned Prior Fusion
 
-External evaluation support is included, but no WHUS2-CR archive or verified prepared test manifest was supplied. The default run clearly records `whus2cr: not run`; RICE completion is not a completed WHUS2-CR benchmark. See `docs/DATA.md` for the manifest/protocol requirements. Set `whus2_manifest` and `whus2_protocol` in `configs/run_all.json` after attaching prepared official test data. Both models are evaluated without fine-tuning; those results do not choose the winner.
+A small convolutional network combines:
 
-## Satellite API and website
+- The current cloudy image.
+- The frozen HSFormer prediction.
+- An earlier observation of the same location.
+- Cloud/shadow and validity masks.
+- The time gap between observations.
 
-The backend uses Copernicus Data Space Sentinel Hub OAuth, Catalog and Process APIs. Create an account and OAuth client in the Sentinel Hub dashboard: https://documentation.dataspace.copernicus.eu/APIs/SentinelHub/Overview/Authentication.html . Credentials stay on the backend. Access is subject to provider quotas.
+The network predicts pixelwise mixing weights and an additional RGB candidate. Valid input pixels outside the supplied affected-region mask are preserved.
 
-A user clicks a map or enters latitude/longitude, selects an area and date range, chooses an acquisition, and requests restoration. Outputs are original/restored PNG, georeferenced restored RGB TIFF, original reflectance TIFF and processing metadata. The original model also exposes mask/severity maps through result endpoints. Acquisition date is shown: this is on-demand processing of available satellite observations, not a live satellite video feed.
+## Datasets
 
-Sentinel-2 L1C RGB bands B04/B03/B02 are converted with fixed `clip(reflectance / 0.4, 0, 1)` scaling. The service restores overlapping 256-pixel tiles and retains no-data masks/georeferencing. This display-RGB adaptation needs separate satellite-domain validation. RICE metrics do not prove API imagery accuracy. A single image cannot establish the true content beneath opaque cloud; outputs are explicitly labeled estimates, not measured cloud-free ground truth.
+The counts below describe the subsets prepared for this project.
 
-### Persistent website
+| Dataset | Purpose | Training | Validation | Test |
+|---|---|---:|---:|---:|
+| RICE | Initial model comparison | 865 | 185 | 186 |
+| WHUS2-CRv subset | Sentinel-2 fine-tuning | 512 | 64 | — |
+| Satellite image triplets | Learned prior fusion | 69 | 24 | 24 |
 
-Extract the Kaggle output ZIP. Install a CUDA-compatible PyTorch build if using a GPU, then:
+Images were processed as 256 × 256 RGB patches.
 
-```
-pip install -r requirements.txt -r requirements-web.txt
-```
+The triplet dataset contains 117 examples across 12 locations, with separate locations used for training, validation, and testing. Earlier observations were selected within 60 days before the input acquisition.
 
-Set environment variables `CDSE_CLIENT_ID`, `CDSE_CLIENT_SECRET`, and a strong `APP_PASSWORD` on the server. `.env.example` lists names; files are not automatically loaded. The login username is `admin`.
+Datasets are not included in this repository.
 
-```
-python -m uvicorn cloud_severity.api:app --host 0.0.0.0 --port 8000
-```
+## Experimental Results
 
-Use one worker (the bounded in-process queue shares one model). Put the service behind HTTPS before remote access. `Dockerfile` is included and requires `deployment/model.pt` plus the prepared HSFormer runtime from the Kaggle output. This is a single-user research application; job history is in memory and image files persist in `web_results`. Apply hosting storage/retention controls for sustained use.
+### RICE Test Partition
 
-The Kaggle Gradio link is temporary and requires an active interactive kernel. A background saved run will not provide permanent hosting. The persistent FastAPI website includes a clickable map and before/after comparison slider; the Kaggle demo uses coordinates with a map preview.
+Evaluation on 186 held-out image pairs.
 
-## Local verification
+| Model | PSNR ↑ | SSIM ↑ | RMSE ↓ | LPIPS ↓ |
+|---|---:|---:|---:|---:|
+| Cloud-guided attention U-Net | 32.081 | 0.9295 | 0.03065 | 0.13127 |
+| RGB-adapted HSFormer | 30.011 | 0.9204 | 0.03779 | 0.14419 |
 
-```
-python scripts/prepare_hsformer.py
-python -m pytest -q
-python -m cloud_severity.pilot
-```
+Attention U-Net performed better across the four reported metrics on this partition.
 
-Tests include synthetic training/resume/evaluation, original-model parity, validation-only selection, tile boundaries, authenticated API validation and georeferenced output with a mocked provider. CPU verification is not a completed T4 training benchmark or a live satellite-account test. No trained accuracy numbers are invented.
+### Sentinel-2 Validation Subset
 
-Build the self-contained notebook after source edits with `python scripts/build_notebook.py`.
+Evaluation on 64 WHUS2-CRv validation pairs after fine-tuning.
 
-Sources: [RICE](https://github.com/BUPTLdy/RICE_DATASET), [HSFormer](https://github.com/qi657/HSFormer-CR), [Sentinel Hub authentication](https://documentation.dataspace.copernicus.eu/APIs/SentinelHub/Overview/Authentication.html).
+| Model | PSNR ↑ | SSIM ↑ | RMSE ↓ | LPIPS ↓ |
+|---|---:|---:|---:|---:|
+| Fine-tuned attention U-Net | 33.262 | 0.9104 | 0.02683 | 0.10954 |
+| Fine-tuned HSFormer | 33.477 | 0.9166 | 0.02652 | 0.10874 |
+
+HSFormer achieved a small numerical advantage across all four metrics and was selected as the backbone for prior-fusion experiments.
+
+### Prior-Fusion Evaluation
+
+Results are averaged across held-out test locations.
+
+| Method | Proxy PSNR ↑ | Proxy cloud MAE ↓ |
+|---|---:|---:|
+| Single-image HSFormer | 17.818 | 0.21752 |
+| Learned fusion | 31.750 | 0.02206 |
+| Earlier-observation baseline | 34.028 | 0.01495 |
+
+The learned fusion model improved over single-image HSFormer but did not outperform the earlier-observation baseline.
+
+These are proxy measurements because the targets were captured on different dates. They do not verify the exact surface conditions beneath clouds on the selected date.
+
+PSNR is measured in decibels. Scores from different datasets and evaluation settings should not be directly ranked.
+
+## Web Application Features
+
+- Google account sign-in.
+- Location search and interactive map selection.
+- Satellite acquisition search.
+- Original/result image comparison.
+- PNG downloads.
+- Saved results with location labels.
+- Account-based result access and deletion.
+
+The application runs locally on the user's computer. Internet access is required for Google sign-in, location search, and satellite image retrieval.
+
+The experimental tables above describe evaluated model outputs, rather than establishing the accuracy of every image displayed by the application.
+
+## Technology Stack
+
+| Component | Technology |
+|---|---|
+| Model implementation | PyTorch |
+| Backend | FastAPI |
+| Frontend | HTML, CSS, JavaScript |
+| Interactive map | Leaflet |
+| Raster processing | Rasterio |
+| Array processing | NumPy |
+| Image handling | Pillow |
+| User authentication | Google OAuth |
+| Satellite services | Copernicus Data Space Ecosystem / Sentinel Hub |
+
+## Repository Structure
+
+```text
+cloud-atlas/
+├── cloud_severity/       # Models, losses, metrics, and dataset utilities
+├── sentinel_triplets/    # Triplet preparation, fusion, and evaluation
+├── temporal_prior/      # Supporting prior-image processing modules
+├── reference_web/       # Application backend and frontend
+├── web/                 # Supporting web assets
+├── scripts/
+│   ├── prepare_hsformer.py
+│   └── run_local_web.py
+├── docs/
+│   └── LOCAL_WEBSITE.md
+├── requirements*.txt
+├── run_website.py
+└── Start Cloud Atlas.cmd
