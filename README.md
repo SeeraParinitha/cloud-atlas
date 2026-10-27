@@ -140,3 +140,10 @@ cloud-atlas/
 ├── requirements*.txt
 ├── run_website.py
 └── Start Cloud Atlas.cmd
+## Model Weights
+
+Download `parent.pt` and `bounded_fusion.pt` from
+[Model Weights](https://github.com/SeeraParinitha/cloud-atlas/releases/tag/v1.0).
+
+Create a `local_models` folder in the project directory and place
+both files inside it before starting the application.
