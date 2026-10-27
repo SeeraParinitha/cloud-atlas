@@ -1,0 +1,5 @@
+{
+  "old_code_sha256": "c94f1df2267ceec95933b75f4151a547d79a7ad694879c6ecbcf417f60e12895",
+  "new_code_sha256": "89392cea04197b6c3e03fb2c5bc114ce5a27c6ba7a8ef36fb0df3bd805d73195",
+  "reason": "Replace inference_mode validation with no_grad; retain numerical training configuration"
+}

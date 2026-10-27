@@ -1,0 +1,50 @@
+.venv/
+__pycache__/
+.pytest_cache/
+third_party/
+data/
+runs/
+cloud_project_v2/
+*.pt
+*.tmp
+.env
+local_settings.json
+local_models/
+local_results/
+
+web_results/
+deployment/
+*.zip
+
+.torch-cache/
+
+inference_workspace/
+
+# Local configuration and secrets
+.env.*
+!.env.example
+!.env.google.example
+*client_secret*.json
+credentials.json
+token.json
+*.pem
+*.key
+
+# Generated outputs and temporary files
+clear_results/
+output/
+outputs/
+tmp/
+*.log
+*.sqlite
+*.sqlite3
+*.db
+
+# Additional model checkpoints
+*.pth
+*.ckpt
+*.safetensors
+
+# Notebook and editor caches
+.ipynb_checkpoints/
+.vscode/
