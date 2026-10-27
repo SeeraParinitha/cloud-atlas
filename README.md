@@ -147,3 +147,9 @@ Download `parent.pt` and `bounded_fusion.pt` from
 
 Create a `local_models` folder in the project directory and place
 both files inside it before starting the application.
+## Contributors
+
+- **Payyavula Manvitha** — CB.SC.U4AIE23240
+- **Seera Parinitha** — CB.SC.U4AIE23268
+- **Jahnavi Vulava** — CB.SC.U4AIE23274
+- **Jahnavi Sree B** — CB.SC.U4AIE23275
